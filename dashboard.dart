@@ -198,251 +198,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .collection('bars')
           .where('status', isEqualTo: 'approved');
 
+      // If there are selected features, filter by them
+      if (_selectedFeatures != null && _selectedFeatures!.isNotEmpty) {
+        query = query.where('features', arrayContainsAny: _selectedFeatures!);
+      }
+
       final QuerySnapshot barSnapshot = await query.get();
 
-      List<Bar> loadedBars = [];
-      Set<Marker> newMarkers = {};
+      setState(() {
+        _bars = barSnapshot.docs;
+        _markers.clear();
 
-      for (var doc in barSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        // Add markers for each bar
+        for (var doc in barSnapshot.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          if (data['latitude'] != null && data['longitude'] != null) {
+            final LatLng position = LatLng(
+              data['latitude'] as double,
+              data['longitude'] as double,
+            );
 
-        // Get bar features
-        List<String> barFeatures = List<String>.from(data['features'] ?? []);
-
-        // Skip this bar if it doesn't match user preferences
-        if (_selectedFeatures != null && _selectedFeatures!.isNotEmpty) {
-          bool hasMatchingFeature = false;
-          for (String feature in _selectedFeatures!) {
-            if (barFeatures.contains(feature)) {
-              hasMatchingFeature = true;
-              break;
-            }
-          }
-          if (!hasMatchingFeature) continue;
-        }
-
-        // Construct full address
-        String fullAddress = [
-          data['streetAddress'] ?? '',
-          data['barangay'] ?? '',
-          data['municipality'] ?? '',
-          data['province'] ?? '',
-        ].where((part) => part.isNotEmpty).join(', ');
-
-        // Get location data
-        GeoPoint? geoPoint = data['location'] as GeoPoint?;
-        LatLng? location;
-        if (geoPoint != null) {
-          location = LatLng(geoPoint.latitude, geoPoint.longitude);
-        }
-
-        // Create Bar object from Firestore data
-        Bar bar = Bar(
-          name: data['barName'] ?? '',
-          description: data['description'] ?? 'No description available',
-          imageUrl: data['profileImagePath'] ?? 'assets/default_bar.jpg',
-          address: fullAddress,
-          operatingHours: data['operatingHours'] ?? 'Hours not specified',
-          features: barFeatures,
-          contactNumber: data['contactNumber'] ?? '',
-          location: location,
-          rating: (data['rating'] ?? 0.0).toDouble(),
-          reviewCount: (data['reviewCount'] ?? 0) as int,
-        );
-
-        if (location != null) {
-          // Create marker for the bar
-          final marker = Marker(
-            markerId: MarkerId(doc.id),
-            position: location,
-            infoWindow: InfoWindow(title: bar.name),
-            icon:
-                BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (context) => Dialog(
-                  backgroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Header with close button
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              bar.name,
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w600,
-                                fontFamily: 'Handlee',
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () => Navigator.pop(context),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        // Description
-                        Text(
-                          bar.description,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // Address
-                        Text(
-                          'Address: ${bar.address}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // Hours
-                        Text(
-                          'Hours: ${bar.operatingHours}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // Contact
-                        Text(
-                          'Contact: ${bar.contactNumber}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        // Features
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: bar.features.map((feature) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                feature,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 20),
-                        // Get Directions Button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(25),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.pop(context);
-                              if (bar.location != null) {
-                                _showDirectionsDialog(bar.location!, bar.name);
-                              }
-                            },
-                            child: const Text(
-                              'Get Directions',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+            _markers.add(
+              Marker(
+                markerId: MarkerId(doc.id),
+                position: position,
+                infoWindow: InfoWindow(
+                  title: data['name'] as String,
+                  snippet: data['description'] as String,
                 ),
-              );
-            },
-          );
-          newMarkers.add(marker);
-        } else if (data['streetAddress'] != null &&
-            data['streetAddress'].isNotEmpty) {
-          try {
-            String address = [
-              data['streetAddress'],
-              data['barangay'],
-              data['municipality'],
-              data['province'],
-            ].where((part) => part != null && part.isNotEmpty).join(', ');
-
-            List<geocoding.Location> locations =
-                await geocoding.locationFromAddress(address);
-
-            if (locations.isNotEmpty) {
-              Bar bar = Bar(
-                name: data['barName'] ?? '',
-                description: data['description'] ?? 'No description available',
-                imageUrl: data['profileImagePath'] ?? 'assets/default_bar.jpg',
-                address: address,
-                operatingHours: data['operatingHours'] ?? 'Hours not specified',
-                features: List<String>.from(data['features'] ?? []),
-                contactNumber: data['contactNumber'] ?? '',
-                location:
-                    LatLng(locations.first.latitude, locations.first.longitude),
-                rating: (data['rating'] ?? 0.0).toDouble(),
-                reviewCount: (data['reviewCount'] ?? 0) as int,
-              );
-              _addMarkerForBar(bar);
-            }
-          } catch (e) {
-            print('Error geocoding address for ${data['barName']}: $e');
+                onTap: () => _showBarDetails(doc),
+              ),
+            );
           }
         }
+        _isLoading = false;
+      });
 
-        loadedBars.add(bar);
-      }
-
-      if (mounted) {
-        setState(() {
-          _markers = newMarkers;
-          _isLoading = false;
-        });
-
-        // Show all markers on the map
-        if (newMarkers.isNotEmpty) {
-          _showAllMarkers();
-        }
+      // Show all markers on the map
+      if (_markers.isNotEmpty) {
+        _showAllMarkers();
       }
     } catch (e) {
-      print('Error loading approved bars: $e');
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      print('Error loading bars: $e');
+      setState(() => _isLoading = false);
     }
+  }
+
+  void _showBarDetails(DocumentSnapshot bar) {
+    final data = bar.data() as Map<String, dynamic>;
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              data['name'] as String,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(data['description'] as String),
+            SizedBox(height: 8),
+            Text('Address: ${data['address'] as String}'),
+            SizedBox(height: 8),
+            Text('Operating Hours: ${data['operatingHours'] as String}'),
+            SizedBox(height: 8),
+            if (data['features'] != null)
+              Wrap(
+                spacing: 8,
+                children: (data['features'] as List<dynamic>)
+                    .map((feature) => Chip(label: Text(feature.toString())))
+                    .toList(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Add method to handle Show All Bars button tap
+  void _handleShowAllBars() {
+    setState(() {
+      _selectedFeatures = null; // Clear selected features
+    });
+    _loadApprovedBars(); // Reload all bars without feature filtering
   }
 
   LatLngBounds _getBounds(Set<Marker> markers) {
@@ -602,46 +443,198 @@ class _DashboardScreenState extends State<DashboardScreen> {
               reviewCount: (data['reviewCount'] ?? 0) as int,
             );
 
-            _addMarkerForBar(bar);
-          } else if (data['streetAddress'] != null &&
-              data['streetAddress'].isNotEmpty) {
-            try {
-              String address = [
-                data['streetAddress'],
-                data['barangay'],
-                data['municipality'],
-                data['province'],
-              ].where((part) => part != null && part.isNotEmpty).join(', ');
+            if (location != null) {
+              // Create marker for the bar
+              final marker = Marker(
+                markerId: MarkerId(doc.id),
+                position: location,
+                infoWindow: InfoWindow(title: bar.name),
+                icon:
+                    BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => Dialog(
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Header with close button
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  bar.name,
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w600,
+                                    fontFamily: 'Handlee',
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close),
+                                  onPressed: () => Navigator.pop(context),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            // Description
+                            Text(
+                              bar.description,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // Address
+                            Text(
+                              'Address: ${bar.address}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Hours
+                            Text(
+                              'Hours: ${bar.operatingHours}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Contact
+                            Text(
+                              'Contact: ${bar.contactNumber}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            // Features
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: bar.features.map((feature) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    feature,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 20),
+                            // Get Directions Button
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(25),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  if (bar.location != null) {
+                                    _showDirectionsDialog(bar.location!, bar.name);
+                                  }
+                                },
+                                child: const Text(
+                                  'Get Directions',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+              newMarkers.add(marker);
+            } else if (data['streetAddress'] != null &&
+                data['streetAddress'].isNotEmpty) {
+              try {
+                String address = [
+                  data['streetAddress'],
+                  data['barangay'],
+                  data['municipality'],
+                  data['province'],
+                ].where((part) => part != null && part.isNotEmpty).join(', ');
 
-              List<geocoding.Location> locations =
-                  await geocoding.locationFromAddress(address);
+                List<geocoding.Location> locations =
+                    await geocoding.locationFromAddress(address);
 
-              if (locations.isNotEmpty) {
-                Bar bar = Bar(
-                  name: data['barName'] ?? '',
-                  description:
-                      data['description'] ?? 'No description available',
-                  imageUrl:
-                      data['profileImagePath'] ?? 'assets/default_bar.jpg',
-                  address: address,
-                  operatingHours:
-                      data['operatingHours'] ?? 'Hours not specified',
-                  features: List<String>.from(data['features'] ?? []),
-                  contactNumber: data['contactNumber'] ?? '',
-                  location: LatLng(
-                      locations.first.latitude, locations.first.longitude),
-                  rating: (data['rating'] ?? 0.0).toDouble(),
-                  reviewCount: (data['reviewCount'] ?? 0) as int,
-                );
-                _addMarkerForBar(bar);
+                if (locations.isNotEmpty) {
+                  Bar bar = Bar(
+                    name: data['barName'] ?? '',
+                    description: data['description'] ?? 'No description available',
+                    imageUrl: data['profileImagePath'] ?? 'assets/default_bar.jpg',
+                    address: address,
+                    operatingHours: data['operatingHours'] ?? 'Hours not specified',
+                    features: List<String>.from(data['features'] ?? []),
+                    contactNumber: data['contactNumber'] ?? '',
+                    location:
+                        LatLng(locations.first.latitude, locations.first.longitude),
+                    rating: (data['rating'] ?? 0.0).toDouble(),
+                    reviewCount: (data['reviewCount'] ?? 0) as int,
+                  );
+                  _addMarkerForBar(bar);
+                }
+              } catch (e) {
+                print('Error geocoding address for ${data['barName']}: $e');
               }
-            } catch (e) {
-              print('Error geocoding address for ${data['barName']}: $e');
+            }
+
+            loadedBars.add(bar);
+          }
+
+          if (mounted) {
+            setState(() {
+              _markers = newMarkers;
+              _isLoading = false;
+            });
+
+            // Show all markers on the map
+            if (newMarkers.isNotEmpty) {
+              _showAllMarkers();
             }
           }
         } catch (e) {
-          print('Error processing bar document ${doc.id}: $e');
-          continue;
+          print('Error loading approved bars: $e');
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
         }
       }
 
@@ -655,6 +648,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       print('Error initializing locations: $e');
     }
+  }
+
+  LatLngBounds _fitBoundsForMarkers() {
+    final LatLngBounds bounds = _getBounds(_markers);
+    mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 100),
+    );
+    return bounds;
   }
 
   void _addMarkerForBar(Bar bar) {
@@ -707,14 +708,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       }
     }
-  }
-
-  LatLngBounds _fitBoundsForMarkers() {
-    final LatLngBounds bounds = _getBounds(_markers);
-    mapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 100),
-    );
-    return bounds;
   }
 
   // Reload user data
@@ -1061,6 +1054,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
+          Container(
+            margin: EdgeInsets.symmetric(vertical: 16),
+            child: ElevatedButton.icon(
+              onPressed: _handleShowAllBars,
+              icon: Icon(Icons.list),
+              label: Text('Show All Bars'),
+              style: ElevatedButton.styleFrom(
+                primary: Theme.of(context).primaryColor,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
       drawer: _buildDrawer(),
@@ -1234,38 +1242,3 @@ Widget _buildNavButton(bool isSelected, String label, IconData icon) {
     ],
   );
 }
-
-// Widget _buildMapTab() {
-//   return Stack(
-//     children: [
-//       GoogleMap(
-//         onMapCreated: (GoogleMapController controller) {
-//           mapController = controller;
-//           _onMapCreated(controller);
-//         },
-//         initialCameraPosition: _kGooglePlex,
-//         markers: _markers,
-//         myLocationEnabled: true,
-//         myLocationButtonEnabled: false,
-//         mapType: MapType.normal,
-//         zoomControlsEnabled: false,
-//         zoomGesturesEnabled: true,
-//         compassEnabled: true,
-//         buildingsEnabled: true,
-//         trafficEnabled: true,
-//         mapToolbarEnabled: true, // Enable the default toolbar for directions
-//         rotateGesturesEnabled: true,
-//         tiltGesturesEnabled: true,
-//       ),
-//       if (_isLoading)
-//         Container(
-//           color: Colors.black54,
-//           child: const Center(
-//             child: CircularProgressIndicator(
-//               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-//             ),
-//           ),
-//         ),
-//     ],
-//   );
-// }
